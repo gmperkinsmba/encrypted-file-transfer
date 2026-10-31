@@ -1,19 +1,99 @@
-altgraph==0.17.5
-bottle==0.13.4
-cffi==2.1.1
-cryptography==50.0.1
-macholib==1.16.4
-packaging==26.3
-pycparser==3.0
-proxy-tools==0.1.0
-pyinstaller==6.22.3
-pyinstaller-hooks-contrib==2026.9
-pyobjc-core==13.0
-pyobjc-framework-cocoa==13.0
-pyobjc-framework-quartz==13.0
-pyobjc-framework-security==13.0
-pyobjc-framework-uniformtypeidentifiers==13.0
-pyobjc-framework-webkit==13.0
-pywebview==6.2.1
-setuptools==84.2.1
-typing-extensions==4.16.0
+--require-hashes
+
+
+
+
+
+
+
+altgraph==0.17.5 \
+    --hash=sha256:f3a22400bce1b0c701683820ac4f3b159cd301acab067c51c653e06961600597
+bottle==0.13.4 \
+    --hash=sha256:045684fbd2764eac9cdeb824861d1551d113e8b683d8d26e296898d3dd99a12e
+cffi==2.1.1 \
+    --hash=sha256:baed1e86cc735622097354b9d1281406caf42ff42a886d29faa8e8d1630333be \
+    --hash=sha256:ca82be1a1d406ecfe1d25dc16cb33488e5a16bf4438c9fb590484ea29d92478b \
+    --hash=sha256:c8d2c9fd1f2d16f780d15127abb050d13d1a76c03a4bd87d7e4980e45e511e12 \
+    --hash=sha256:398aff33cee2767e3e781d2554c54bd0dff386bb437581e0d8011fde1a942ec1 \
+    --hash=sha256:c8c69575568085ba0b1b10c0249d779a214aea6f6522e949a0fc9fb0fcb449d0 \
+    --hash=sha256:f81b3b8f3d4e343550fa4baa0e479bba9f2d29ce9c2e9b51d1ce1718d7442fcf \
+    --hash=sha256:9d2055050ea716bd38b7f7f1579c275386646b4894c155a3e2f3cd62ed41b7c6 \
+    --hash=sha256:19ee6127ee34de7d83ce3d371ebc5ed91addbdcc39f9ab15ce4eb35a4e534971 \
+    --hash=sha256:d28630f5854ab07ab1fd4aba756de52326c82e6be15d414b12793f1975048b54 \
+    --hash=sha256:661c298b4821edebead0c91edd2b00374d67ad7c5a1f7a91d4442633b79d6a72 \
+    --hash=sha256:7750c6449dff7864bb9bb27ddfb0267756189201a3afc911d82b3caacd70dfc3 \
+    --hash=sha256:0beceaabe56af686895136a2de78db54ecd8e4046b236b8fd6d6cb61389e9bf2 \
+    --hash=sha256:fb92203a88b3d3053034db775110081c49d28be6551923805e039924093761e4 \
+    --hash=sha256:2ae64be792b8966f2c69538199728b290e34726562896df1e5dc8ffd8d8188e8 \
+    --hash=sha256:c26608d2222fb1e94487e4a387d85f13eb55d5ed725cb25a0c589ac4ee60e7bc \
+    --hash=sha256:4be96343e422f2dfcd12ab5c9f5aebe03f82f737c6bffeca6830b3875cb44aab
+cryptography==50.0.1 \
+    --hash=sha256:b8f852c65863251b9e3a1b8c150ce21e59b522dbb6a7d4bc80e680d38388e986 \
+    --hash=sha256:30a125032e5642a21ff816e021152bd4e7e94f03eff3f4b7fca41cd22bc3110f \
+    --hash=sha256:ca83d00d9e69cd5eb63f2e69c3a5a59e0cecae5ae14c6ae0b35830fe3b37bad0 \
+    --hash=sha256:9cb3cb952cf5a8abd50c782a98a89d71699715e802fe349704b47f2425b42a94
+macholib==1.16.4 \
+    --hash=sha256:da1a3fa8266e30f0ce7e97c6a54eefaae8edd1e5f86f3eb8b95457cae90265ea
+packaging==26.3 \
+    --hash=sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c
+pycparser==3.0 \
+    --hash=sha256:b727414169a36b7d524c1c3e31839a521725078d7b2ff038656844266160a992
+proxy-tools==0.1.0 \
+    --hash=sha256:ccb3751f529c047e2d8a58440d86b205303cf0fe8146f784d1cbcd94f0a28010
+pyinstaller==6.22.3 \
+    --hash=sha256:052f4a1cd4f81092ccb7a18fe8ebc9ecf832a5917317e39fb3775af4e959b253
+pyinstaller-hooks-contrib==2026.9 \
+    --hash=sha256:fb3e67dd64122561724c48ad0366ac9e8c16e638b63bf7d85de03bf3fdbf06c3
+pyobjc-core==13.0 \
+    --hash=sha256:4627348cb31c8deb2bb94702d9bcaa74869f4fef9559fd134416a6a4ca42006e \
+    --hash=sha256:5818e3d8cc2677a1e767968ebfe3bc0cb7f80c1f7c19c653ee25ef1cc1b3e188 \
+    --hash=sha256:f29f7cdb3969268716017ada9516b94f6dd1c66c2e415274b5ac1169440da1a4 \
+    --hash=sha256:1e8752b3950ceec603bf36f57083151abed15e0c2e7c5b8c3efded9c81dc732c \
+    --hash=sha256:fe470bd7b8163b4b8d216b1ebe5b227f01c0fa1c4e0085d7ccade269dec02bb0 \
+    --hash=sha256:c497a23077ba0a42b59b879d81049eebfb0b7b67a8ca80c68b6d3683bbbd6d6f \
+    --hash=sha256:d65d383efed5a803e43f6c67ccc9f4c94754842b2268da24319bb57a852b016f \
+    --hash=sha256:292462e0947a09aca3737a06c44457cb2aa58f267cfc581c16fca036fc073b45
+pyobjc-framework-cocoa==13.0 \
+    --hash=sha256:16dd1e8890ed695ce12bcd367ed0ac9f3e70dd1f7a8098b6398427c162591b83 \
+    --hash=sha256:e1618d315939c9fae57cb858d4db496ec61f82495ce6a877398131ee494fc19d \
+    --hash=sha256:bb0bcba2e4e9d05af875306e0e055cfc2f152fd602d5f2f1a54490adebebcd34 \
+    --hash=sha256:d6fa11ea29d85d46e65ed1c9fdba3a5131ad26971bf24bb7d16aa55f06bcdc1e \
+    --hash=sha256:88be6d452e7531f695ce6d41428aa74bcaade9ddbc50af592419b9f2fbb7c879 \
+    --hash=sha256:1a6b9f9e0ab123e51fa7df43bbc6c0414a444facd2225ad4f221a0d842c49ad6 \
+    --hash=sha256:9282ebad57784ec18f4b7ea2e6b65bac0a6f56cc21a5c63e061fa48a9b49dd26 \
+    --hash=sha256:f1e26ad2225d1c84973cce725f2f4aeeb4d5f653a36c8a9f0b691c5529dc7780
+pyobjc-framework-quartz==13.0 \
+    --hash=sha256:90630977d69975e94f49f06e7b32b5e757334d71239944ad38c3efabb73aa4ef \
+    --hash=sha256:5e1d49f2699d128553a52fad473622ff4fd424d05e879d9585dad0a9f7c3dcfd \
+    --hash=sha256:f7a4fab3bb1a78640135db257f2c75277d0931bad26c500e34b88480c33dece1 \
+    --hash=sha256:b94ba73bfbd1b707723c88997aaf38b2aad03d9417f6fe54f243fc583237a353 \
+    --hash=sha256:ea179def24ffbdd61e43e7c33a0cb2b2d79c7cb39fa8d212ab87c964702e5f87 \
+    --hash=sha256:fdba4c5d095e2f88812d0584fdb4b35dc31f38d93145830cc955f42710f1f8ec \
+    --hash=sha256:d76914284e721b96e2a7850da81343cd4af083a00d07afd87545be432d1e2e24 \
+    --hash=sha256:ab6f410ac494b63ed48294392650b88ce8229511a0eb0059458982daeeacc6f7
+pyobjc-framework-security==13.0 \
+    --hash=sha256:027e4ec0a3080efa82fadb88de68c7aa5aedacceacf5115faf4c6924704500fb \
+    --hash=sha256:6693e6e083497c6e51ac4533c137f41712b3751cb3c45c3daf7ecc6a197d437e \
+    --hash=sha256:fa7228c7bfafbec54577d89ada79e3eb772234ba3e65e4c11873b417a7ff920f \
+    --hash=sha256:77fe472d115e527fdcaa9b97de693307deaf2c3bea36058b47ec1a5048b4a0bd \
+    --hash=sha256:7c295d54229adf8241538057e9d0106cc24aba452ec0050b0c222c56f707620a \
+    --hash=sha256:28a54bc028ac5951271ce168043111a478434e2271cbd054d460fdb246acc8ca \
+    --hash=sha256:e988fb40d2f0a83e453056829433cb464699fc0fe5169d2db76a833c15cdc769 \
+    --hash=sha256:2fcf3f415090829eb363cdd77df6370be17162700e34cd81d0bcf478c938a4b7
+pyobjc-framework-uniformtypeidentifiers==13.0 \
+    --hash=sha256:5375270af9980825b3a20267312bbd616e9828c4b7d5ab008c98d9bf6b8a51e3
+pyobjc-framework-webkit==13.0 \
+    --hash=sha256:71de92b724c67abec74c6d256834669754dbb9d166eaaace83a7965b99f3bc81 \
+    --hash=sha256:868cbeca83d079af6f049765d018db731d8fb2fb3bbfaf8be7fd6e96e8c6ca1a \
+    --hash=sha256:3d99dd14a745d0520c2af55ac57afe63aac0368897613990a69cf36479b5d4cc \
+    --hash=sha256:0378b0755d162f7bf0154fbd57edf72ab2e4619bf0379bde00e66208704b6cb5 \
+    --hash=sha256:d97dd5077360d1e019d26bc26492e1c30fd3ef60e98ae48c9a9d555b8856ead0 \
+    --hash=sha256:98f4342f072dc5adce93802953c1876c9d772d6aa6b8122750a332a3ca28f606 \
+    --hash=sha256:1ca998217551140bd82b8bbfc09860e975a2d8dc649eb397ee8a6d3a74cfc058 \
+    --hash=sha256:a6e6685f2684ff0c1cb09e8fe26f94fc58d2ed146102a3513828a421a04bb57b
+pywebview==6.2.1 \
+    --hash=sha256:9d07275f53894ab4d5e2e0e996227193e7187dec276d9b624dccbce029216b46
+setuptools==84.2.1 \
+    --hash=sha256:ca140b45d5325a9478f880e351484f62fef15f336462e449ca0c03c873d589c2
+typing-extensions==4.16.0 \
+    --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8

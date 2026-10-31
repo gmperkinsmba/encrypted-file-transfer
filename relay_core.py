@@ -13,6 +13,7 @@ import os
 import re
 import secrets
 import stat
+import sys
 import time
 import urllib.error
 import urllib.parse
@@ -23,6 +24,8 @@ from typing import Callable
 
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+from keychain_store import KeychainError, MacKeychain
 
 API = "https://api.github.com"
 UPLOAD = "https://uploads.github.com"
@@ -48,6 +51,16 @@ def _valid_asset(value: object) -> bool:
 
 class RelayError(Exception):
     """Safe public error; callers must not expose underlying HTTP details."""
+
+
+def make_secret_backend():
+    """Return the platform secret store; only macOS uses the system Keychain."""
+    if sys.platform == "darwin":
+        try:
+            return MacKeychain()
+        except KeychainError:
+            raise RelayError("macOS Keychain is unavailable") from None
+    return None
 
 
 def _json_bytes(value: object) -> bytes:
@@ -206,10 +219,34 @@ def private_runtime(path: Path) -> Path:
 
 
 class SecretStore:
-    """Atomic owner-only settings file, intentionally outside the checkout."""
-    def __init__(self, path: Path):
+    """Keep macOS secrets in Keychain and non-secret settings in an atomic file."""
+    SECRET_NAMES = ("token", "pairing_key")
+
+    def __init__(self, path: Path, secret_backend=None):
         self.path = path
         private_runtime(path.parent)
+        self.secret_backend = secret_backend if secret_backend is not None else make_secret_backend()
+        canonical = os.path.normcase(str(path.expanduser().resolve()))
+        self.scope = hashlib.sha256(os.fsencode(canonical)).hexdigest()
+
+    def _new_secret_ref(self, name: str) -> str:
+        return f"{name}-{self.scope}-{secrets.token_hex(16)}"
+
+    def _valid_secret_ref(self, name: object, ref: object) -> bool:
+        return (name in self.SECRET_NAMES and isinstance(ref, str) and
+                re.fullmatch(rf"{re.escape(name)}-{self.scope}-[a-f0-9]{{32}}", ref) is not None)
+
+    def _read_refs(self, metadata: dict) -> tuple[dict, list[str]]:
+        refs = metadata.get("secret_refs", {})
+        pending = metadata.get("cleanup_pending", [])
+        if not isinstance(refs, dict) or any(not self._valid_secret_ref(name, ref) for name, ref in refs.items()):
+            raise RelayError("Relay secret references are invalid")
+        if not isinstance(pending, list) or any(not isinstance(ref, str) or
+                re.fullmatch(rf"(?:token|pairing_key)-{self.scope}-[a-f0-9]{{32}}", ref) is None for ref in pending):
+            raise RelayError("Relay secret references are invalid")
+        if set(pending).intersection(refs.values()):
+            raise RelayError("Relay secret references are invalid")
+        return refs, pending
 
     def save(self, settings: dict) -> None:
         if not isinstance(settings, dict):
@@ -239,18 +276,111 @@ class SecretStore:
         if mode == "gh":
             settings = dict(settings)
             settings.pop("token", None)
+        if self.secret_backend is not None:
+            self._save_keychain(settings)
+            return
+        if self.path.is_symlink():
+            raise RelayError("Settings path must not be a symlink")
+        self._write_json(settings)
+
+    def _write_json(self, settings: dict) -> None:
         if self.path.is_symlink():
             raise RelayError("Settings path must not be a symlink")
         tmp = self.path.with_name(self.path.name + "." + secrets.token_hex(8) + ".tmp")
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8") as stream:
-            stream.write(json.dumps(settings, separators=(",", ":")))
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(tmp, self.path)
         try:
-            os.chmod(self.path, 0o600)
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                stream.write(json.dumps(settings, separators=(",", ":")))
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(tmp, self.path)
         except OSError:
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise RelayError("Settings could not be saved") from None
+
+    def _backend_call(self, method: str, account: str, *args):
+        try:
+            return getattr(self.secret_backend, method)(account, *args)
+        except KeychainError:
+            raise RelayError("macOS Keychain is unavailable or access was denied") from None
+        except Exception:
+            raise RelayError("macOS Keychain is unavailable or access was denied") from None
+
+    def _save_keychain(self, settings: dict) -> None:
+        if self.path.is_symlink():
+            raise RelayError("Settings path must not be a symlink")
+        previous_metadata = {}
+        try:
+            previous_metadata = json.loads(self.path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            pass
+        except (OSError, json.JSONDecodeError):
+            raise RelayError("Existing relay settings could not be read") from None
+        if not isinstance(previous_metadata, dict):
+            raise RelayError("Existing relay settings are invalid")
+        old_refs, old_pending = self._read_refs(previous_metadata)
+        desired = {
+            "pairing_key": settings.get("pairing_key"),
+            "token": settings.get("token") if settings.get("auth_mode") == "pat" else None,
+        }
+        new_refs = {}
+        created = []
+        committed = False
+        retired = list(dict.fromkeys([*old_pending, *old_refs.values()]))
+        refs = {}
+        try:
+            for name, value in desired.items():
+                if value is not None:
+                    ref = self._new_secret_ref(name)
+                    self._backend_call("set", ref, value)
+                    created.append(ref)
+                    if self._backend_call("get", ref) != value:
+                        raise RelayError("macOS Keychain secret verification failed")
+                    new_refs[name] = ref
+            metadata = {key: settings[key] for key in ("owner", "repo", "channel", "recipient", "auth_mode") if key in settings}
+            metadata["secret_refs"] = new_refs
+            pending = [ref for ref in retired if ref not in new_refs.values()]
+            if pending:
+                metadata["cleanup_pending"] = pending
+            self._write_json(metadata)
+            committed = True
+        except Exception as exc:
+            if not committed:
+                cleanup_pending = []
+                for ref in created:
+                    try:
+                        self._backend_call("delete", ref)
+                    except RelayError:
+                        cleanup_pending.append(ref)
+                if cleanup_pending and previous_metadata:
+                    preserved = dict(previous_metadata)
+                    _, existing_pending = self._read_refs(preserved)
+                    preserved["cleanup_pending"] = list(dict.fromkeys([*existing_pending, *cleanup_pending]))
+                    try:
+                        self._write_json(preserved)
+                    except RelayError:
+                        pass
+                if isinstance(exc, RelayError):
+                    raise
+                raise RelayError("Relay settings could not be saved to macOS Keychain") from None
+            raise
+        cleanup_pending = []
+        for ref in pending:
+            try:
+                self._backend_call("delete", ref)
+            except RelayError:
+                cleanup_pending.append(ref)
+        if cleanup_pending:
+            metadata["cleanup_pending"] = cleanup_pending
+        else:
+            metadata.pop("cleanup_pending", None)
+        try:
+            self._write_json(metadata)
+        except RelayError:
+            # The committed file still records the retired references for a later cleanup attempt.
             pass
 
     def load(self) -> dict:
@@ -264,22 +394,96 @@ class SecretStore:
             raise RelayError("Relay settings are invalid")
         if os.name == "posix" and stat.S_IMODE(self.path.stat().st_mode) & 0o077:
             raise RelayError("Relay settings permissions are too broad")
+        if self.secret_backend is not None:
+            return self._load_keychain(value)
         return value
 
+    def _load_keychain(self, value: dict) -> dict:
+        refs = value.get("secret_refs")
+        if refs is None:
+            legacy = {name: value[name] for name in self.SECRET_NAMES if name in value}
+            if not legacy:
+                return value
+            new_refs = {}
+            created = []
+            try:
+                for name, secret in legacy.items():
+                    if not isinstance(secret, str):
+                        raise RelayError("Legacy relay settings are invalid")
+                    ref = self._new_secret_ref(name)
+                    self._backend_call("set", ref, secret)
+                    created.append(ref)
+                    if self._backend_call("get", ref) != secret:
+                        raise RelayError("macOS Keychain secret verification failed")
+                    new_refs[name] = ref
+                metadata = dict(value)
+                for name in legacy:
+                    metadata.pop(name, None)
+                metadata["secret_refs"] = new_refs
+                self._write_json(metadata)
+            except Exception:
+                for ref in created:
+                    try:
+                        self._backend_call("delete", ref)
+                    except RelayError:
+                        pass
+                raise RelayError("Legacy relay secrets could not be migrated; original settings were preserved") from None
+            value = metadata
+            refs = metadata["secret_refs"]
+        refs, _ = self._read_refs(value)
+        if set(refs) != set(value.get("secret_refs", {})):
+            raise RelayError("Relay secret references are invalid")
+        result = dict(value)
+        result.pop("secret_refs", None)
+        result.pop("cleanup_pending", None)
+        for name in self.SECRET_NAMES:
+            if name in refs:
+                secret = self._backend_call("get", refs[name])
+                if secret is None:
+                    raise RelayError("Saved relay secrets are unavailable from macOS Keychain")
+                result[name] = secret
+        if result.get("auth_mode") == "pat" and not result.get("token"):
+            raise RelayError("Saved relay secrets are unavailable from macOS Keychain")
+        return result
+
     def remove(self) -> None:
-        self.path.unlink(missing_ok=True)
+        if self.secret_backend is None:
+            self.path.unlink(missing_ok=True)
+            return
+        try:
+            metadata = json.loads(self.path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return
+        except (OSError, json.JSONDecodeError):
+            raise RelayError("Relay settings could not be removed") from None
+        if not isinstance(metadata, dict):
+            raise RelayError("Relay settings could not be removed")
+        refs, pending = self._read_refs(metadata)
+        owned_refs = list(dict.fromkeys([*refs.values(), *pending]))
+        try:
+            if owned_refs:
+                self._write_json({"secret_refs": {}, "cleanup_pending": owned_refs})
+            for ref in owned_refs:
+                self._backend_call("delete", ref)
+            self.path.unlink(missing_ok=True)
+        except Exception:
+            raise RelayError("Relay settings could not be removed") from None
 
     def status(self) -> dict:
         try:
             s = self.load()
             flags = {"auth_mode": s.get("auth_mode"), "owner_set": bool(s.get("owner")),
                      "repo_set": bool(s.get("repo")), "channel_set": bool(s.get("channel")),
-                     "pairing_key_set": bool(s.get("pairing_key")), "token_set": bool(s.get("token")) or s.get("auth_mode") == "gh"}
+                     "pairing_key_set": bool(s.get("pairing_key")), "token_set": bool(s.get("token")) or s.get("auth_mode") == "gh",
+                     "keychain_cleanup_pending": bool(json.loads(self.path.read_text(encoding="utf-8")).get("cleanup_pending", [])) if self.secret_backend is not None else False}
             flags["configured"] = all(flags[key] for key in ("owner_set", "repo_set", "channel_set", "pairing_key_set", "token_set"))
             return flags
-        except RelayError:
-            return {"configured": False, "auth_mode": None, "owner_set": False, "repo_set": False,
-                    "channel_set": False, "pairing_key_set": False, "token_set": False}
+        except RelayError as exc:
+            flags = {"configured": False, "auth_mode": None, "owner_set": False, "repo_set": False,
+                     "channel_set": False, "pairing_key_set": False, "token_set": False}
+            if "Keychain" in str(exc):
+                flags["error"] = "Saved secrets are unavailable from macOS Keychain"
+            return flags
 
 
 @dataclass
@@ -299,7 +503,7 @@ class SafeHTTP:
         class NoRedirect(urllib.request.HTTPRedirectHandler):
             def redirect_request(self, req, fp, code, msg, headers, newurl):
                 return None
-        opener = urllib.request.build_opener(NoRedirect)
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
         try:
             return opener.open(request, timeout=60)
         except urllib.error.HTTPError as e:
