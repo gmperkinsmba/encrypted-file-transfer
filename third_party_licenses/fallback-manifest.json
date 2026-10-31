@@ -1,0 +1,24 @@
+{
+  "pyobjc-core-13.0-License.txt": {
+    "sha256": "0ca04b07928d4872b9d9bb22187ca0426dd8bfab08f26eada0999a71dc81aaff",
+    "source_url": "https://pypi.org/project/pyobjc-core/13.0/",
+    "source_archive_sha256": "ffe154462d14aa4852f424e9116f17b5f8d44f78fc0f6c4727e721a5fa7177da"
+  },
+  "pyobjc-framework-security-13.0-License.txt": {
+    "sha256": "0ca04b07928d4872b9d9bb22187ca0426dd8bfab08f26eada0999a71dc81aaff",
+    "source_url": "https://pypi.org/project/pyobjc-framework-security/13.0/",
+    "source_archive_sha256": "e5c3f90773fb53dcd525075011f80a83e6f38cb0ad0bcd13fb8f629bf35d22aa"
+  },
+  "pyobjc-framework-uniformtypeidentifiers-13.0-License.txt": {
+    "sha256": "0ca04b07928d4872b9d9bb22187ca0426dd8bfab08f26eada0999a71dc81aaff",
+    "source_url": "https://pypi.org/project/pyobjc-framework-uniformtypeidentifiers/13.0/",
+    "source_archive_sha256": "d70ae3722c91c57de71a77d1004a22a118e38798f66c30552cb93754f7a9cbb5"
+  },
+  "proxy-tools-0.1.0-LICENSE.txt": {
+    "sha256": "a428fb8a2e762af3eb0a6edbbb88e9b42ccfee80fd9b423958bcacf9b9abbfe4",
+    "source_url": "https://github.com/jtushman/proxy_tools/blob/db43f1e35d4f90a65c5a4d56d9e9af88212ec6e6/LICENSE.txt",
+    "metadata_license": "MIT",
+    "source_license_title": "BSD License",
+    "source_note": "Package metadata says MIT; repository LICENSE.txt is included verbatim and says BSD."
+  }
+}

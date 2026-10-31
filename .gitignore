@@ -2,7 +2,11 @@ __pycache__/
 *.py[cod]
 *.log
 .venv/
+.desktop-venv/
 venv/
+dist/
+build/
+*.app/
 runtime/
 uploads/
 *.db
@@ -12,3 +16,8 @@ exports/
 graphify-out/
 secrets*
 .env
+relay-settings.json
+received-transfers.json
+*.tpx
+*.tpr
+*.tmp

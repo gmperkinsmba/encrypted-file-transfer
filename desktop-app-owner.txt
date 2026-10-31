@@ -1,0 +1,3 @@
+Teleport desktop bundle
+io.github.gmperkinsmba.teleport
+local-build-owner-marker-v1

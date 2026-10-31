@@ -1,1 +1,75 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark"><title>Teleport — verified file handoff</title><link rel="stylesheet" href="/app.css"></head><body><header><a class="wordmark" href="/" aria-label="Teleport home">teleport<span>•</span></a><span class="local"><i></i> LOCAL SESSION</span></header><main><section class="intro"><p class="eyebrow">A HANDOFF YOU CAN PROVE</p><h1>Teleport</h1><p class="lede">Send files to a named recipient and verify the bytes before cleanup.</p></section><section class="panel" aria-labelledby="send-title"><div class="panel-head"><div><p class="eyebrow">NEW HANDOFF</p><h2 id="send-title">Prepare files</h2></div><span class="count">01 / SEND</span></div><form id="send-form"><label class="drop" id="drop"><input id="files" type="file" multiple><span class="drop-icon" aria-hidden="true">＋</span><strong>Choose files to send</strong><small>Files stay on this device. Up to 128 MiB per transfer.</small></label><div id="file-list" class="file-list" aria-live="polite"></div><div class="fields"><label>Recipient name<input id="recipient" maxlength="160" required placeholder="Who is receiving this?"></label><label>Expires in<select id="hours"><option value="24">24 hours</option><option value="1">1 hour</option><option value="6">6 hours</option><option value="72">3 days</option><option value="168">7 days</option></select></label></div><button class="primary" id="send" type="submit">Create handoff <span>↗</span></button><p class="notice">Local transport only. This app does not encrypt or send files over the internet.</p></form></section><section id="active" class="panel hidden" aria-live="polite"></section><section class="receive panel"><p class="eyebrow">RECEIVE A HANDOFF</p><h2>Verify a delivery</h2><p class="support">Enter the handoff ID and recipient code shared by the sender. Both are needed to access files.</p><form id="receive-form"><div class="fields"><label>Handoff ID<input id="transfer-id" autocomplete="off" required></label><label>Recipient code<input id="code" autocomplete="off" required></label></div><label class="recipient-field">Your recipient name<input id="receive-name" required></label><button class="secondary" type="submit">Check handoff</button></form><div id="receive-state" aria-live="polite"></div></section><footer><span>Teleport runs on this device.</span><button id="settings-toggle" class="link-button" type="button">Settings</button></footer><aside id="settings" class="settings hidden"><h2>Settings</h2><p>Transfer manifests and chunks stay in a private local data folder. This build uses no external service or API key.</p></aside></main><script src="/app.js" defer></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Teleport — verified file handoff</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <header>
+    <a class="wordmark" href="/" aria-label="Teleport home">teleport<span>•</span></a>
+    <span class="local"><i></i> PRIVATE TRANSFER</span>
+  </header>
+  <main>
+    <section class="intro">
+      <p class="eyebrow">A HANDOFF YOU CAN PROVE</p>
+      <h1>Teleport</h1>
+      <p class="lede">Send files to a named recipient and verify the bytes before cleanup.</p>
+    </section>
+
+    <nav class="transport-switch" aria-label="Transport">
+      <button type="button" data-mode="remote" class="mode-button active">Private relay <span>encrypted</span></button>
+      <button type="button" data-mode="local" class="mode-button">On this device <span>local only</span></button>
+    </nav>
+
+    <section class="panel" aria-labelledby="send-title">
+      <div class="panel-head"><div><p class="eyebrow" id="send-kicker">PRIVATE HANDOFF</p><h2 id="send-title">Prepare files</h2></div><span class="count">01 / SEND</span></div>
+      <form id="send-form">
+        <label class="drop" id="drop"><input id="files" type="file" multiple><span class="drop-icon" aria-hidden="true">＋</span><strong>Choose files to send</strong><small id="file-limit">Encrypted before upload · up to 32 MiB</small></label>
+        <div id="file-list" class="file-list" aria-live="polite"></div>
+        <div class="fields"><label>Recipient name<input id="recipient" maxlength="160" required placeholder="Who is receiving this?"></label><label>Expires in<select id="hours"><option value="24">24 hours</option><option value="1">1 hour</option><option value="6">6 hours</option><option value="72">3 days</option><option value="168">7 days</option></select></label></div>
+        <button class="primary" id="send" type="submit">Send encrypted files <span>↗</span></button>
+        <p class="notice" id="send-notice">File names and transfer details are encrypted with your shared pairing key.</p>
+      </form>
+    </section>
+    <section id="active" class="panel hidden" aria-live="polite"></section>
+
+    <section id="remote-receive" class="receive panel">
+      <p class="eyebrow">RECEIVE A HANDOFF</p><h2>Save and verify files</h2>
+      <p class="support">Enter the transfer ID and asset reference from the sender. Teleport checks the pairing key, saves without overwriting, and verifies each file.</p>
+      <form id="remote-receive-form">
+        <div class="fields"><label>Transfer ID<input id="remote-id" autocomplete="off" required></label><label>Encrypted asset reference<input id="remote-asset" autocomplete="off" required></label></div>
+        <label class="recipient-field">Your recipient name<input id="remote-name" required></label>
+        <div class="inline-actions"><button class="secondary" type="submit">Check and save once</button><button class="link-button" id="watch-remote" type="button">Watch for delivery</button></div>
+      </form>
+      <div id="remote-receive-state" aria-live="polite"></div>
+    </section>
+
+    <section id="local-receive" class="receive panel hidden">
+      <p class="eyebrow">LOCAL RECEIVE</p><h2>Verify a delivery</h2>
+      <p class="support">Both the transfer ID and recipient code are required to access files on this device.</p>
+      <form id="receive-form"><div class="fields"><label>Handoff ID<input id="transfer-id" autocomplete="off" required></label><label>Recipient code<input id="code" autocomplete="off" required></label></div><label class="recipient-field">Your recipient name<input id="receive-name" required></label><button class="secondary" type="submit">Check handoff</button></form>
+      <div id="receive-state" aria-live="polite"></div>
+    </section>
+
+    <footer><span id="footer-scope">Private relay · GitHub private release assets</span><button id="settings-toggle" class="link-button" type="button">Settings</button></footer>
+    <aside id="settings" class="settings hidden">
+      <h2>Settings</h2>
+      <p class="fine">GitHub private repository relay. Both sides need repository Contents write access. Tokens and pairing keys stay in the private Teleport runtime folder.</p>
+      <p id="settings-status" class="status-line" aria-live="polite">Checking saved settings…</p>
+      <form id="settings-form">
+        <div class="fields"><label>Repository owner<input id="setting-owner" required autocomplete="off"></label><label>Repository name<input id="setting-repo" required autocomplete="off"></label></div>
+        <div class="fields"><label>Channel<input id="setting-channel" required maxlength="80" placeholder="team-transfer"></label><label>Default recipient<input id="setting-recipient" required maxlength="160"></label></div>
+        <div class="fields"><label>Authentication<select id="auth-mode"><option value="pat">Fine-grained token</option><option value="gh">GitHub CLI auth</option></select></label><label id="token-wrap">Fine-grained PAT<input id="setting-token" type="password" autocomplete="new-password"></label></div>
+        <label id="pair-wrap">Pairing key<input id="setting-key" type="password" autocomplete="new-password" placeholder="Blank creates a new shared key"></label>
+        <button class="secondary file-action" type="submit">Save relay settings</button>
+      </form>
+      <div id="pair-output" class="hidden"></div>
+      <div class="inline-actions"><button class="link-button" id="remove-key" type="button">Remove pairing key</button><button class="link-button danger-link" id="remove-settings" type="button">Remove all relay settings</button></div>
+    </aside>
+  </main>
+  <script src="/app.js" defer></script>
+</body>
+</html>

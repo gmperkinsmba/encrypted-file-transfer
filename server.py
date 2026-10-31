@@ -1,17 +1,30 @@
 #!/usr/bin/env python3
 """Loopback-only, resumable file handoff with verified local receipt."""
-import hashlib, json, os, secrets, shutil, threading, time
+import hashlib, json, os, secrets, shutil, socketserver, sys, threading, time
+import struct
+from relay_core import RelayError
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import quote, unquote
 
 ROOT = Path(__file__).resolve().parent
-DATA = Path(os.environ.get("TELEPORT_DATA", Path.home() / ".local/share/teleport"))
+if os.environ.get("TELEPORT_DATA"):
+    DATA = Path(os.environ["TELEPORT_DATA"]).expanduser()
+elif sys.platform == "darwin":
+    DATA = Path.home() / "Library" / "Application Support" / "Teleport"
+else:
+    DATA = Path.home() / ".local" / "share" / "teleport"
 MAX_FILE = 128 * 1024**2
 MAX_BODY = 2 * 1024**2 + 4096
+MAX_RELAY_BODY = 32 * 1024**2 + 65536
 CHUNK = 1024**2
 PORT = int(os.environ.get("TELEPORT_PORT", "8311"))
+if DATA.is_symlink(): raise RuntimeError("Teleport runtime directory must not be a symlink")
+try: DATA.resolve().relative_to(ROOT)
+except ValueError: pass
+else: raise RuntimeError("Teleport runtime must be outside the application folder")
 DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
+if DATA.is_symlink() or not DATA.is_dir(): raise RuntimeError("Teleport runtime must be a real directory")
 os.chmod(DATA, 0o700)
 LOCK = threading.RLock()
 SESSION = secrets.token_urlsafe(32)
@@ -39,28 +52,38 @@ class Handler(BaseHTTPRequestHandler):
     def send_json(self, status, obj):
         b=json.dumps(obj).encode(); self.send_response(status); self.send_header("Content-Type","application/json"); self.send_header("Content-Length",str(len(b))); self.send_header("Cache-Control","no-store"); self.send_header("X-Content-Type-Options","nosniff"); self.end_headers(); self.wfile.write(b)
     def valid_origin(self):
+        port=self.server.server_port
         host=self.headers.get("Host","")
-        if host not in (f"127.0.0.1:{PORT}", f"localhost:{PORT}"): return False
+        if host not in (f"127.0.0.1:{port}", f"localhost:{port}"): return False
         origin=self.headers.get("Origin")
-        return origin in (f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}") and secrets.compare_digest(self.headers.get("X-Teleport-Request",""),SESSION)
+        return origin in (f"http://127.0.0.1:{port}", f"http://localhost:{port}") and secrets.compare_digest(self.headers.get("X-Teleport-Request",""),SESSION)
     def valid_get_boundary(self):
+        port=self.server.server_port
         host=self.headers.get("Host",""); origin=self.headers.get("Origin")
-        hosts=(f"127.0.0.1:{PORT}",f"localhost:{PORT}")
-        origins=(f"http://127.0.0.1:{PORT}",f"http://localhost:{PORT}")
+        hosts=(f"127.0.0.1:{port}",f"localhost:{port}")
+        origins=(f"http://127.0.0.1:{port}",f"http://localhost:{port}")
         return host in hosts and (origin is None or origin in origins) and self.headers.get("Sec-Fetch-Site") in ("same-origin","none") and secrets.compare_digest(self.headers.get("X-Teleport-Request",""),SESSION)
     def body(self, limit=MAX_BODY):
         n=int(self.headers.get("Content-Length","-1"))
         if n < 0 or n > limit: raise ValueError("Request body is too large")
-        return self.rfile.read(n)
+        raw=self.rfile.read(n)
+        if len(raw)!=n: raise ValueError("Incomplete request body")
+        return raw
     def do_GET(self):
-        if self.headers.get("Host") not in (f"127.0.0.1:{PORT}", f"localhost:{PORT}"): return self.send_json(403,{"error":"Host check failed"})
-        if self.path == "/":
+        port=self.server.server_port
+        if self.headers.get("Host") not in (f"127.0.0.1:{port}", f"localhost:{port}"): return self.send_json(403,{"error":"Host check failed"})
+        path=self.path.split("?",1)[0]
+        if path == "/":
             b=(ROOT/"index.html").read_bytes(); self.send_response(200); self.send_header("Content-Type","text/html; charset=utf-8"); self.send_header("Content-Length",str(len(b))); self.send_header("X-Content-Type-Options","nosniff"); self.send_header("Content-Security-Policy","default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"); self.send_header("Referrer-Policy","no-referrer"); self.end_headers(); self.wfile.write(b); return
-        if self.path == "/app.css" or self.path == "/app.js":
-            p=ROOT/self.path[1:]; b=p.read_bytes(); self.send_response(200); self.send_header("Content-Type","text/css" if p.suffix==".css" else "text/javascript"); self.send_header("Content-Length",str(len(b))); self.send_header("X-Content-Type-Options","nosniff"); self.send_header("Cache-Control","no-cache"); self.end_headers(); self.wfile.write(b); return
-        if self.path=="/api/session": return self.send_json(200,{"token":SESSION})
+        if path == "/app.css" or path == "/app.js":
+            p=ROOT/path[1:]; b=p.read_bytes(); self.send_response(200); self.send_header("Content-Type","text/css" if p.suffix==".css" else "text/javascript"); self.send_header("Content-Length",str(len(b))); self.send_header("X-Content-Type-Options","nosniff"); self.send_header("Cache-Control","no-cache"); self.end_headers(); self.wfile.write(b); return
+        if path=="/api/session": return self.send_json(200,{"token":SESSION})
+        if path=="/api/relay/status":
+            if not self.valid_get_boundary(): return self.send_json(403,{"error":"Request boundary check failed"})
+            from remote_service import settings_status
+            return self.send_json(200,settings_status())
         try:
-            parts=self.path.strip("/").split("/"); tid=parts[2]; m=read_manifest(tid)
+            parts=path.strip("/").split("/"); tid=parts[2]; m=read_manifest(tid)
             if m["expires"] < time.time(): return self.send_json(410,{"error":"Transfer expired"})
             if len(parts)==5 and parts[3]=="download":
                 if not self.valid_get_boundary(): return self.send_json(403,{"error":"Request boundary check failed"})
@@ -80,6 +103,51 @@ class Handler(BaseHTTPRequestHandler):
     def _do_post(self):
         if not self.valid_origin(): return self.send_json(403,{"error":"Request boundary check failed"})
         try:
+            if self.path=="/api/relay/configure":
+                data=json.loads(self.body(65536))
+                if not isinstance(data,dict): raise ValueError("Invalid settings")
+                from remote_service import configure
+                result=configure(data.get("owner",""),data.get("repo",""),data.get("channel",""),data.get("recipient",""),data.get("auth_mode",""),data.get("token"),data.get("pairing_key"))
+                return self.send_json(200,result)
+            if self.path=="/api/relay/remove-settings":
+                self.body(1024)
+                from remote_service import remove_settings
+                return self.send_json(200,remove_settings())
+            if self.path=="/api/relay/remove-pairing-key":
+                self.body(1024)
+                from remote_service import remove_pairing_key
+                return self.send_json(200,remove_pairing_key())
+            if self.path=="/api/relay/send":
+                raw=self.body(MAX_RELAY_BODY)
+                if len(raw)<4: raise ValueError("Invalid selected files")
+                hlen=struct.unpack(">I",raw[:4])[0]
+                if hlen>65536 or len(raw)<4+hlen: raise ValueError("Invalid selected files")
+                metadata=json.loads(raw[4:4+hlen])
+                if not isinstance(metadata,dict): raise ValueError("Invalid selected files")
+                from remote_service import send_selected
+                return self.send_json(201,send_selected(metadata,raw[4+hlen:]))
+            if self.path=="/api/relay/receive":
+                data=json.loads(self.body(8192))
+                if not isinstance(data,dict): raise ValueError("Invalid receive request")
+                from remote_service import receive_once
+                result=receive_once(data.get("transfer_id",""),data.get("asset",""),data.get("recipient"))
+                return self.send_json(200,result)
+            if self.path=="/api/relay/available":
+                data=json.loads(self.body(8192))
+                if not isinstance(data,dict): raise ValueError("Invalid availability request")
+                from remote_service import transfer_available
+                return self.send_json(200,{"available":transfer_available(data.get("transfer_id",""),data.get("asset",""))})
+            if self.path=="/api/relay/receipt":
+                data=json.loads(self.body(8192))
+                if not isinstance(data,dict): raise ValueError("Invalid receipt request")
+                from remote_service import check_receipt
+                return self.send_json(200,check_receipt(data.get("transfer_id",""),data.get("asset","")))
+            if self.path=="/api/relay/cleanup":
+                data=json.loads(self.body(8192))
+                if not isinstance(data,dict): raise ValueError("Invalid cleanup request")
+                from remote_service import relay
+                result=relay().cleanup(data.get("transfer_id",""),data.get("asset",""))
+                return self.send_json(200,result)
             if self.path=="/api/transfers":
                 x=json.loads(self.body())
                 if not isinstance(x,dict): raise ValueError("Invalid transfer details")
@@ -160,10 +228,48 @@ class Handler(BaseHTTPRequestHandler):
                     if h.hexdigest()!=f["sha256"]: return self.send_json(422,{"error":"Stored bytes changed; cleanup blocked"})
                 shutil.rmtree(safe_dir(tid)); return self.send_json(200,{"cleaned":True})
             return self.send_json(404,{"error":"Not found"})
-        except (ValueError,KeyError,IndexError,json.JSONDecodeError): return self.send_json(400,{"error":"Invalid request"})
+        except RelayError as exc: return self.send_json(400,{"error":str(exc)})
+        except (ValueError,KeyError,IndexError,json.JSONDecodeError,RecursionError): return self.send_json(400,{"error":"Invalid request"})
         except FileNotFoundError: return self.send_json(404,{"error":"Transfer not found"})
-    def do_HEAD(self): self.send_response(405); self.end_headers()
+        except Exception: return self.send_json(500,{"error":"Request could not be completed"})
+    def _method_not_allowed(self):
+        if self.headers.get("Host") not in (f"127.0.0.1:{self.server.server_port}", f"localhost:{self.server.server_port}"):
+            self.send_response(403); self.end_headers(); return
+        self.send_response(405); self.end_headers()
+    do_HEAD = _method_not_allowed
+    do_PUT = _method_not_allowed
+    do_DELETE = _method_not_allowed
+    do_PATCH = _method_not_allowed
+    do_OPTIONS = _method_not_allowed
+    do_CONNECT = _method_not_allowed
+    do_TRACE = _method_not_allowed
+
+class LoopbackHTTPServer(ThreadingHTTPServer):
+    daemon_threads = True
+
+    def server_bind(self):
+        # Bind a numeric loopback address directly; do not resolve a hostname.
+        socketserver.TCPServer.server_bind(self)
+        self.server_port = self.server_address[1]
+
+
+def make_server(port: int = 0, data_dir: str | Path | None = None):
+    """Build the bounded loopback HTTP server used by the desktop host."""
+    global DATA
+    if data_dir is not None:
+        DATA = Path(data_dir).expanduser()
+        if DATA.is_symlink(): raise ValueError("Teleport runtime directory must not be a symlink")
+        try: DATA.resolve().relative_to(ROOT)
+        except ValueError: pass
+        else: raise ValueError("Teleport runtime must be outside the application folder")
+        DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if DATA.is_symlink() or not DATA.is_dir(): raise ValueError("Teleport runtime must be a real directory")
+        os.chmod(DATA, 0o700)
+        os.environ["TELEPORT_DATA"] = str(DATA)
+    return LoopbackHTTPServer(("127.0.0.1", int(port)), Handler)
+
 
 if __name__=="__main__":
-    print(f"Teleport listening at http://127.0.0.1:{PORT}",flush=True)
-    ThreadingHTTPServer(("127.0.0.1",PORT),Handler).serve_forever()
+    app=make_server(PORT)
+    print(f"Teleport listening at http://127.0.0.1:{app.server_port}",flush=True)
+    app.serve_forever()
