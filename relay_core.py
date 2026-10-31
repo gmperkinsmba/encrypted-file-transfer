@@ -420,7 +420,7 @@ class GitHubRelay:
             return release
         if not create:
             raise RelayError("Private relay release is unavailable")
-        created = json.loads(self._api("POST", "/releases", _json_bytes({"tag_name": tag, "name": "Teleport relay", "draft": True, "prerelease": True})).body)
+        created = json.loads(self._api("POST", "/releases", _json_bytes({"tag_name": tag, "name": "Encrypted File Transfer relay", "draft": True, "prerelease": True})).body)
         if not isinstance(created, dict) or type(created.get("id")) is not int or created.get("draft") is not True or created.get("tag_name") != tag:
             raise RelayError("Could not create private relay release")
         return created

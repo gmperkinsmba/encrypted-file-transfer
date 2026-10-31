@@ -1,14 +1,16 @@
-# Teleport
+# Encrypted File Transfer
 
-**First principle:** Recipients check delivered bytes before Teleport removes its encrypted relay copy.
+**First principle:** Recipients check delivered bytes before the app removes its encrypted relay copy.
 
-Teleport hands selected files to a named recipient through draft release assets in a GitHub private repository. It encrypts file bytes, names, recipient, channel, manifest, and expiry with AES-GCM before upload. The receiver verifies and saves each file, then publishes an authenticated receipt. The sender can remove the relay asset after checking that receipt.
+Send files with encryption through a private GitHub relay. Check delivery.
+
+The app sends selected files to named recipients. It uses draft assets in a private GitHub repo. AES-GCM encrypts the file and transfer details before upload. These include names, recipient, channel, manifest, and expiry. The receiver checks and saves each file. It then sends an authenticated receipt. The sender can remove the relay asset after checking that receipt.
 
 ## Native macOS app
 
-Teleport's native Mac app is the primary interface. It runs the shared Python backend on an ephemeral loopback port, opens a local-only WKWebView, and shuts down its listener when the app closes. It does not attach to an existing server.
+The native Mac app is the main way to use Encrypted File Transfer. It starts its own Python server on a temporary loopback port. A local WKWebView shows the app. It stops the server when the app closes. It does not attach to an existing server.
 
-Build on macOS with Python 3.12.14 and Xcode command line tools. The build includes Python and the pinned dependencies:
+Build on macOS with Python 3.12.14 and Xcode command line tools. The app includes Python and its pinned packages:
 
 ```sh
 python3.12 -m venv .desktop-venv
@@ -18,7 +20,9 @@ python build_desktop.py
 python install_desktop.py
 ```
 
-Launch **Teleport.app** from `~/Applications` or Finder. Quit with **Teleport → Quit Teleport** or `⌘Q`. The local build is not Developer ID signed or notarized. Runtime settings, pairing key, token, and receive history live in `~/Library/Application Support/Teleport`, outside the app and source folder. Uninstall by moving `~/Applications/Teleport.app` to Trash. Remove the runtime folder separately only if you also want to erase local settings and receive history. The install script refuses to replace an unrelated or unmarked app and keeps an owned prior copy as a timestamped backup.
+Build creates `dist/Encrypted File Transfer.app`.
+
+Open **Encrypted File Transfer.app** from `~/Applications` or Finder. Quit with **Encrypted File Transfer → Quit Encrypted File Transfer** or `⌘Q`. The app is not Developer ID signed or notarized. Settings, pairing key, token, and receive history stay in `~/Library/Application Support/Teleport`, outside the app and source folder. To uninstall, move `~/Applications/Encrypted File Transfer.app` to Trash. The runtime folder stores settings and receive history. Remove it to erase them. The installer will not replace unrelated or unmarked apps. It keeps an owned prior copy as a dated backup.
 
 ## Optional browser preview
 
@@ -32,15 +36,15 @@ Open `http://127.0.0.1:8311`. The on-device mode remains available. It is for lo
 
 ## Configure the private relay
 
-Both participants configure the same private repository, channel, and 32-byte pairing key. The sender can leave Pairing key blank to generate one. Teleport shows a generated key once; copy it and share it separately through a trusted channel. The recipient enters that exact key in Settings. Each participant configures their own GitHub authentication.
+Both people use the same private repo and channel. They share a 32-byte pairing key. The sender can leave Pairing key blank to make a new one. The app shows the new key once. Copy it and share it through a trusted channel. The recipient enters that key in Settings. Each person sets up their own GitHub sign-in.
 
-Use a fine-grained personal access token with access to the selected private repository. GitHub's release-asset API requires repository Contents write permission for uploads and draft release access; both participants need that permission. Teleport never needs a public repository. It checks that the configured full repository name matches and that GitHub reports it private before each relay operation.
+Use a fine-grained personal access token for this repo. GitHub release uploads need Contents write access and draft release access. Both people need both permissions. The app does not need a public repo. Before each relay action, it checks the full repo name. It also checks that GitHub marks the repo as private.
 
-Alternatively, select GitHub CLI authentication. Teleport invokes the installed `gh auth token --hostname github.com` command only after this mode is selected. It does not inspect GitHub CLI credentials in token mode. Settings, token, pairing key, and replay history stay outside this checkout in an owner-only runtime directory. The Settings status reveals configured flags only. Remove pairing key or Remove all relay settings to erase stored secrets.
+You can also choose GitHub CLI sign-in. The app runs `gh auth token --hostname github.com` only in this mode. It does not read GitHub CLI credentials in token mode. Settings, token, and pairing key stay outside this checkout. The private runtime folder also keeps replay history. Settings shows only whether each item is set. Remove the pairing key or all relay settings to erase saved secrets.
 
 ## Send and receive
 
-Select files in the app and send them through the private relay. Share the transfer ID and opaque asset reference with the recipient. The recipient can enter those values and click **Check and save once**, or use **Watch for delivery**. The CLI can discover matching encrypted assets automatically:
+Select files and send them through the private relay. Give the recipient the transfer ID and asset reference. The recipient can enter them and click **Check and save once**. Or the recipient can use **Watch for delivery**. The CLI can also find matching encrypted assets:
 
 ```sh
 python3 teleport_cli.py configure --owner OWNER --repo PRIVATE_REPO --channel team-transfer --recipient Riley --auth pat
@@ -52,16 +56,16 @@ python3 teleport_cli.py cleanup TRANSFER_ID ASSET_REFERENCE
 python3 teleport_cli.py status
 ```
 
-`configure` prompts for the pairing key without echoing it; leave the prompt blank to generate a new key, which is printed once. A recipient enters the key received through a separate trusted channel. With `--auth pat`, the token prompt is hidden too. With `--auth gh`, Teleport uses GitHub CLI authentication and asks only for the pairing key. `inbox` scans once. `watch-inbox` polls continuously until its bounded timeout or Ctrl-C. Both save verified files under `~/Downloads/Teleport/<transfer-id>/` without overwriting. The sender checks a verified receiver receipt before cleanup. Cleanup is an explicit CLI command or a deliberate Settings flow action; it deletes only the encrypted relay asset. It never deletes the selected source file.
+`configure` asks for the pairing key without showing it as you type. Leave it blank to make a key. The new key prints once. A recipient enters the key shared through a trusted channel. With `--auth pat`, the token prompt is hidden too. With `--auth gh`, the CLI uses GitHub CLI sign-in and asks only for the pairing key. `inbox` scans once. `watch-inbox` polls until its time limit or Ctrl-C. Both save checked files under `~/Downloads/Teleport/<transfer-id>/` without overwriting. The sender checks the signed receipt before cleanup. Clean up with a deliberate CLI or Settings action. It deletes only the encrypted relay asset. It never deletes the selected source file.
 
 ## Limits and security boundary
 
-- Each file is limited to 16 MiB; a transfer is limited to 32 MiB and 100 files. Files are processed in memory, so peak use can be several times the transfer size.
-- Each remote transfer is one binary encrypted asset. There is no archive extraction. The receiver rejects unsafe names, symlinks, existing transfer folders, and changed bytes; files are atomically published without clobbering.
-- AES-GCM uses a fresh random 12-byte nonce and a 256-bit pairing key. The transfer ID is opaque and authenticated; user metadata stays inside the ciphertext. A matching pairing key is required to decrypt and publish a valid receipt. See the [AES-GCM API reference](https://cryptography.io/en/stable/hazmat/primitives/aead/).
-- The GitHub API and uploads host are fixed. An asset download may follow one HTTPS 302 to `release-assets.githubusercontent.com:443`; that request carries no API Authorization or Cookie headers and cannot redirect again.
-- GitHub private release assets are the relay. GitHub controls their availability and retention. Teleport does not claim a third-party-independent delivery guarantee.
-- The local-only mode stores chunks unencrypted in the private runtime folder and uses the same-device receiver flow. It is not a remote or encrypted transport.
+- Each file can be up to 16 MiB. A transfer can hold up to 100 files and 32 MiB total. Files stay in memory, so peak use can be several times the transfer size.
+- Each remote transfer is one encrypted binary asset. The receiver does not unpack archives. It rejects unsafe names, symlinks, existing transfer folders, and changed bytes. It saves files without overwriting.
+- AES-GCM uses a new random 12-byte nonce and a 256-bit pairing key. The transfer ID is hidden and authenticated. User details stay inside the encrypted data. The matching pairing key is needed to decrypt files and make a valid receipt. See the [AES-GCM API reference](https://cryptography.io/en/stable/hazmat/primitives/aead/).
+- The GitHub API and upload hosts are fixed. A file download may follow one HTTPS 302 redirect to `release-assets.githubusercontent.com:443`. That request sends no API Authorization or Cookie headers. It cannot redirect again.
+- GitHub private release assets carry each transfer. GitHub controls how long they stay available. The app cannot promise delivery if GitHub is down or removes an asset.
+- Local-only mode stores chunks without encryption in the private runtime folder. The receiver must use the same device. This mode is not remote or encrypted.
 
 ## Test
 
@@ -71,4 +75,4 @@ Requires Python 3.11 or later and `cryptography` (see `requirements.txt`). No te
 python3 -m unittest discover -s tests -v
 ```
 
-The `cryptography` dependency is distributed under Apache-2.0 OR BSD-3-Clause terms. Original Teleport code is MIT licensed; see `LICENSE`.
+The `cryptography` dependency is distributed under Apache-2.0 OR BSD-3-Clause terms. Original Encrypted File Transfer code is MIT licensed; see `LICENSE`.

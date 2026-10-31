@@ -33,7 +33,7 @@ class DesktopTests(unittest.TestCase):
             try:
                 with urlopen(f"http://127.0.0.1:{app.server_port}/?desktop=1", timeout=3) as response:
                     self.assertEqual(response.status, 200)
-                    self.assertIn(b"<h1>Teleport</h1>", response.read())
+                    self.assertIn(b"<h1>Encrypted File Transfer</h1>", response.read())
                 with self.assertRaises(HTTPError) as failure:
                     urlopen(Request(f"http://127.0.0.1:{app.server_port}/", headers={"Host": "evil.test"}), timeout=3)
                 self.assertEqual(failure.exception.code, 403)
@@ -47,7 +47,7 @@ class DesktopTests(unittest.TestCase):
 
     def test_bundle_replacement_requires_exact_identity_and_marker(self):
         with tempfile.TemporaryDirectory() as temporary:
-            bundle = Path(temporary) / "Teleport.app"
+            bundle = Path(temporary) / "Encrypted File Transfer.app"
             resources = bundle / "Contents" / "Resources"
             resources.mkdir(parents=True)
             (bundle / "Contents" / "Info.plist").write_bytes(plistlib.dumps({"CFBundleIdentifier": BUNDLE_ID}))

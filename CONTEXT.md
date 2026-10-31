@@ -1,8 +1,8 @@
-# Teleport architecture and invariants
+# Encrypted File Transfer architecture and invariants
 
 ## First principle
 
-Recipients check delivered bytes before Teleport removes its encrypted relay copy.
+Recipients check delivered bytes before the sender removes the encrypted relay copy.
 
 ## Remote relay
 

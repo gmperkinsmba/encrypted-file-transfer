@@ -1,21 +1,22 @@
 <!doctype html>
 <html lang="en">
 <head>
+<meta name="description" content="Send encrypted files through a private GitHub relay and verify delivery.">
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <title>Teleport — verified file handoff</title>
+  <title>Encrypted File Transfer</title>
   <link rel="stylesheet" href="/app.css">
 </head>
 <body>
   <header>
-    <a class="wordmark" href="/" aria-label="Teleport home">teleport<span>•</span></a>
+    <a class="wordmark" href="/" aria-label="Encrypted File Transfer home">Encrypted File Transfer<span>•</span></a>
     <span class="local"><i></i> PRIVATE TRANSFER</span>
   </header>
   <main>
     <section class="intro">
       <p class="eyebrow">A HANDOFF YOU CAN PROVE</p>
-      <h1>Teleport</h1>
+      <h1>Encrypted File Transfer</h1>
       <p class="lede">Send files to a named recipient and verify the bytes before cleanup.</p>
     </section>
 
@@ -38,7 +39,7 @@
 
     <section id="remote-receive" class="receive panel">
       <p class="eyebrow">RECEIVE A HANDOFF</p><h2>Save and verify files</h2>
-      <p class="support">Enter the transfer ID and asset reference from the sender. Teleport checks the pairing key, saves without overwriting, and verifies each file.</p>
+      <p class="support">Enter the transfer ID and asset reference from the sender. Encrypted File Transfer checks the pairing key, saves without overwriting, and verifies each file.</p>
       <form id="remote-receive-form">
         <div class="fields"><label>Transfer ID<input id="remote-id" autocomplete="off" required></label><label>Encrypted asset reference<input id="remote-asset" autocomplete="off" required></label></div>
         <label class="recipient-field">Your recipient name<input id="remote-name" required></label>
@@ -57,7 +58,7 @@
     <footer><span id="footer-scope">Private relay · GitHub private release assets</span><button id="settings-toggle" class="link-button" type="button">Settings</button></footer>
     <aside id="settings" class="settings hidden">
       <h2>Settings</h2>
-      <p class="fine">GitHub private repository relay. Both sides need repository Contents write access. Tokens and pairing keys stay in the private Teleport runtime folder.</p>
+      <p class="fine">GitHub private repository relay. Both sides need repository Contents write access. Tokens and pairing keys stay in the private Encrypted File Transfer runtime folder.</p>
       <p id="settings-status" class="status-line" aria-live="polite">Checking saved settings…</p>
       <form id="settings-form">
         <div class="fields"><label>Repository owner<input id="setting-owner" required autocomplete="off"></label><label>Repository name<input id="setting-repo" required autocomplete="off"></label></div>

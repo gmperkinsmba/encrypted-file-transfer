@@ -19,12 +19,12 @@ MAX_BODY = 2 * 1024**2 + 4096
 MAX_RELAY_BODY = 32 * 1024**2 + 65536
 CHUNK = 1024**2
 PORT = int(os.environ.get("TELEPORT_PORT", "8311"))
-if DATA.is_symlink(): raise RuntimeError("Teleport runtime directory must not be a symlink")
+if DATA.is_symlink(): raise RuntimeError("App runtime directory must not be a symlink")
 try: DATA.resolve().relative_to(ROOT)
 except ValueError: pass
-else: raise RuntimeError("Teleport runtime must be outside the application folder")
+else: raise RuntimeError("App runtime must be outside the application folder")
 DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
-if DATA.is_symlink() or not DATA.is_dir(): raise RuntimeError("Teleport runtime must be a real directory")
+if DATA.is_symlink() or not DATA.is_dir(): raise RuntimeError("App runtime must be a real directory")
 os.chmod(DATA, 0o700)
 LOCK = threading.RLock()
 SESSION = secrets.token_urlsafe(32)
@@ -258,12 +258,12 @@ def make_server(port: int = 0, data_dir: str | Path | None = None):
     global DATA
     if data_dir is not None:
         DATA = Path(data_dir).expanduser()
-        if DATA.is_symlink(): raise ValueError("Teleport runtime directory must not be a symlink")
+        if DATA.is_symlink(): raise ValueError("App runtime directory must not be a symlink")
         try: DATA.resolve().relative_to(ROOT)
         except ValueError: pass
-        else: raise ValueError("Teleport runtime must be outside the application folder")
+        else: raise ValueError("App runtime must be outside the application folder")
         DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
-        if DATA.is_symlink() or not DATA.is_dir(): raise ValueError("Teleport runtime must be a real directory")
+        if DATA.is_symlink() or not DATA.is_dir(): raise ValueError("App runtime must be a real directory")
         os.chmod(DATA, 0o700)
         os.environ["TELEPORT_DATA"] = str(DATA)
     return LoopbackHTTPServer(("127.0.0.1", int(port)), Handler)
@@ -271,5 +271,5 @@ def make_server(port: int = 0, data_dir: str | Path | None = None):
 
 if __name__=="__main__":
     app=make_server(PORT)
-    print(f"Teleport listening at http://127.0.0.1:{app.server_port}",flush=True)
+    print(f"Encrypted File Transfer listening at http://127.0.0.1:{app.server_port}",flush=True)
     app.serve_forever()

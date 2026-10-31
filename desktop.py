@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Native macOS shell for Teleport."""
+"""Native macOS shell for Encrypted File Transfer."""
 from __future__ import annotations
 
 import threading
@@ -15,7 +15,7 @@ def run() -> None:
     worker.start()
     url = f"http://127.0.0.1:{app_server.server_port}/?desktop=1"
     try:
-        webview.create_window("Teleport", url, width=1080, height=760, min_size=(820, 600))
+        webview.create_window("Encrypted File Transfer", url, width=1080, height=760, min_size=(820, 600))
         install_policy(url)
         webview.start()
     finally:
@@ -31,8 +31,8 @@ if __name__ == "__main__":
         import AppKit
 
         alert = AppKit.NSAlert.alloc().init()
-        alert.setMessageText_("Teleport could not start")
-        alert.setInformativeText_("The local app failed to open. Restart Teleport and try again.")
+        alert.setMessageText_("Encrypted File Transfer could not start")
+        alert.setInformativeText_("The local app failed to open. Restart Encrypted File Transfer and try again.")
         alert.addButtonWithTitle_("OK")
         alert.runModal()
         raise SystemExit(1)
