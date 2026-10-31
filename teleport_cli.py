@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Command-line entry point for Teleport's shared relay backend."""
+"""Command-line entry point for Encrypted File Transfer's shared relay backend."""
 import argparse
 import getpass
 import json

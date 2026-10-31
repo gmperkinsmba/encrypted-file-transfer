@@ -241,11 +241,11 @@ async function receiveLocal(id, code, recipient, manifest) {
     }
     const result = await responseJson(await req(`/api/transfers/${id}/receive`, { method: 'POST', body: { code, recipient, hashes: verified.map(f => f.sha256) } }));
     const receipt = JSON.stringify(result.receipt);
-    out.innerHTML = `<p class="ok">Received bytes verified; file downloads requested.</p><p class="receipt">Receipt fingerprint: ${await hash(new Blob([receipt]))}</p><details><summary>View receipt</summary><pre class="receipt">${escapeHtml(receipt)}</pre></details><button id="cleanup" class="secondary file-action">Clean up sender copy</button><p class="fine">Cleanup deletes only Teleport's stored transfer chunks after this verified receive.</p>`;
+    out.innerHTML = `<p class="ok">Received bytes verified; file downloads requested.</p><p class="receipt">Receipt fingerprint: ${await hash(new Blob([receipt]))}</p><details><summary>View receipt</summary><pre class="receipt">${escapeHtml(receipt)}</pre></details><button id="cleanup" class="secondary file-action">Clean up sender copy</button><p class="fine">Cleanup deletes only Encrypted File Transfer stored transfer chunks after this verified receive.</p>`;
     $('#cleanup').onclick = async () => {
-      if (!confirm('Delete Teleport’s stored copy for this handoff? Your selected source files will not be touched.')) return;
+      if (!confirm('Delete Encrypted File Transfer’s stored copy for this handoff? Your selected source files will not be touched.')) return;
       const clean = await responseJson(await req(`/api/transfers/${id}/cleanup`, { method: 'POST', body: { code, recipient } }));
-      out.innerHTML = clean.cleaned ? '<p class="ok">Teleport transfer copy removed.</p>' : '<p class="error">Cleanup did not complete.</p>';
+      out.innerHTML = clean.cleaned ? '<p class="ok">Encrypted File Transfer copy removed.</p>' : '<p class="error">Cleanup did not complete.</p>';
     };
   } catch (err) { out.innerHTML = `<p class="error">${escapeHtml(err.message)}</p>`; }
 }
@@ -271,7 +271,7 @@ $('#settings-form').addEventListener('submit', async e => {
     $('#setting-token').value = ''; $('#setting-key').value = '';
     $('#recipient').value = $('#setting-recipient').value.trim();
     resultSlot.textContent = 'Relay settings saved outside the application folder.';
-    if (result.pairing_key) $('#pair-output').innerHTML = `<p class="fine">Copy this new pairing key now and share it separately with the recipient. Teleport will not show it again.</p><code class="pair-code">${escapeHtml(result.pairing_key)}</code>`;
+    if (result.pairing_key) $('#pair-output').innerHTML = `<p class="fine">Copy this new pairing key now and share it separately with the recipient. Encrypted File Transfer will not show it again.</p><code class="pair-code">${escapeHtml(result.pairing_key)}</code>`;
     else $('#pair-output').innerHTML = '<p class="fine">Pairing key saved. The value is hidden and cannot be retrieved from Settings.</p>';
     $('#pair-output').classList.remove('hidden');
     setMode('remote');
