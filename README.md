@@ -40,7 +40,9 @@ Both people use the same private repo and channel. They share a 32-byte pairing 
 
 Use a fine-grained personal access token for this repo. GitHub release uploads need Contents write access and draft release access. Both people need both permissions. The app does not need a public repo. Before each relay action, it checks the full repo name. It also checks that GitHub marks the repo as private.
 
-You can also choose GitHub CLI sign-in. The app runs `gh auth token --hostname github.com` only in this mode. It does not read GitHub CLI credentials in token mode. Settings, token, and pairing key stay outside this checkout. The private runtime folder also keeps replay history. Settings shows only whether each item is set. Remove the pairing key or all relay settings to erase saved secrets.
+You can also choose GitHub CLI sign-in. The app runs `gh auth token --hostname github.com` only in this mode. It does not read GitHub CLI credentials in token mode. On macOS, the PAT and pairing key are stored in macOS Keychain; the owner-only runtime settings file contains only nonsecret configuration and references. Remove the pairing key or all relay settings to erase the app's Keychain items. The private runtime folder also keeps replay history.
+
+On other platforms, secrets remain in the owner-only settings file with restrictive file permissions. Those permissions limit access by other local accounts; they do not encrypt the secrets. Settings status shows only whether each item is set.
 
 ## Send and receive
 

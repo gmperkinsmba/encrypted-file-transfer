@@ -5,11 +5,14 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 _IMPORT_RUNTIME = tempfile.TemporaryDirectory()
 _SAVED_TELEPORT_DATA = os.environ.get("TELEPORT_DATA")
 os.environ["TELEPORT_DATA"] = _IMPORT_RUNTIME.name
 import server
+import relay_core
+from fake_keychain import FakeKeychain
 if _SAVED_TELEPORT_DATA is None:
     os.environ.pop("TELEPORT_DATA", None)
 else:
@@ -22,6 +25,8 @@ class DesktopServerTests(unittest.TestCase):
         self.prior_server_data = server.DATA
         self.prior_data = os.environ.get("TELEPORT_DATA")
         self.runtime = Path(self.temp.name).resolve() / "runtime"
+        self.keychain_patch = patch.object(relay_core, "make_secret_backend", return_value=FakeKeychain())
+        self.keychain_patch.start()
         self.app = server.make_server(0, self.runtime)
         self.thread = threading.Thread(target=self.app.serve_forever, daemon=True)
         self.thread.start()
@@ -38,6 +43,7 @@ class DesktopServerTests(unittest.TestCase):
         self.app.shutdown()
         self.app.server_close()
         self.thread.join(timeout=2)
+        self.keychain_patch.stop()
         server.DATA = self.prior_server_data
         if self.prior_data is None:
             os.environ.pop("TELEPORT_DATA", None)

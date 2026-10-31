@@ -8,7 +8,6 @@ import unittest
 from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
-from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 
 from cryptography.exceptions import InvalidTag
@@ -16,9 +15,11 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from relay_core import (API, CDN_HOST, MAX_PACKET, GitHubRelay, RelayError, Response,
                        SafeHTTP, SecretStore, build_packet, make_receipt, open_packet,
-                       receipt_asset_name, safe_write_files, verify_receipt, verify_saved_files)
+                       receipt_asset_name, safe_write_files, verify_receipt, verify_saved_files,
+                       make_secret_backend)
 from remote_service import send_selected
 import teleport_cli
+from fake_keychain import FakeKeychain
 
 
 KEY = bytes(range(32))
@@ -137,7 +138,7 @@ class StoreAndFileTests(unittest.TestCase):
     def test_secret_store_status_is_flags_only_and_remove_works(self):
         with tempfile.TemporaryDirectory() as root:
             path = Path(root) / "private" / "settings.json"
-            store = SecretStore(path)
+            store = SecretStore(path, secret_backend=FakeKeychain())
             store.save({"owner": "owner", "repo": "private", "channel": "blue", "auth_mode": "pat",
                         "token": "ghp_" + "x" * 36, "pairing_key": base64.urlsafe_b64encode(KEY).decode().rstrip("=")})
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
@@ -148,6 +149,225 @@ class StoreAndFileTests(unittest.TestCase):
             self.assertTrue(status["token_set"])
             store.remove()
             self.assertFalse(store.status()["configured"])
+
+    def test_keychain_store_keeps_only_nonsecret_metadata_and_removes_owned_items(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "private" / "settings.json"
+            keychain = FakeKeychain()
+            keychain.values["unrelated"] = "stay"
+            store = SecretStore(path, secret_backend=keychain)
+            token = "synthetic-token-" + "x" * 30
+            pairing_key = base64.urlsafe_b64encode(KEY).decode().rstrip("=")
+            store.save({"owner": "owner", "repo": "private", "channel": "blue", "recipient": "Riley",
+                        "auth_mode": "pat", "token": token, "pairing_key": pairing_key})
+            raw = path.read_text(encoding="utf-8")
+            self.assertNotIn(token, raw)
+            self.assertNotIn(pairing_key, raw)
+            refs = json.loads(raw)["secret_refs"]
+            self.assertEqual(set(refs), {"pairing_key", "token"})
+            self.assertTrue(all(ref.startswith(name + "-") for name, ref in refs.items()))
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            self.assertEqual(path.parent.stat().st_mode & 0o777, 0o700)
+            self.assertEqual(store.load()["token"], token)
+            self.assertEqual(store.load()["pairing_key"], pairing_key)
+            status = store.status()
+            self.assertTrue(status["configured"])
+            self.assertNotIn("token", status)
+            self.assertNotIn("pairing_key", status)
+            store.remove()
+            self.assertEqual(keychain.values, {"unrelated": "stay"})
+
+    def test_keychain_gh_mode_keeps_pairing_key_and_removes_old_pat(self):
+        with tempfile.TemporaryDirectory() as root:
+            keychain = FakeKeychain()
+            path = Path(root) / "settings.json"
+            store = SecretStore(path, secret_backend=keychain)
+            key = base64.urlsafe_b64encode(KEY).decode().rstrip("=")
+            old_token = "synthetic-old-token-" + "x" * 30
+            store.save({"owner": "owner", "repo": "private", "channel": "blue", "recipient": "Riley",
+                        "auth_mode": "pat", "pairing_key": key, "token": old_token})
+            store.save({"owner": "owner", "repo": "private", "channel": "blue", "recipient": "Riley",
+                        "auth_mode": "gh", "pairing_key": key})
+            self.assertEqual(len(keychain.values), 1)
+            self.assertTrue(next(iter(keychain.values)).startswith("pairing_key-"))
+            self.assertNotIn("token", store.load())
+            self.assertEqual(json.loads(path.read_text())["auth_mode"], "gh")
+
+    def test_legacy_secret_migration_verifies_before_stripping_original(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "settings.json"
+            keychain = FakeKeychain()
+            token = "synthetic-legacy-token-" + "z" * 30
+            key = base64.urlsafe_b64encode(KEY).decode().rstrip("=")
+            legacy = {"owner": "owner", "repo": "private", "channel": "blue", "recipient": "Riley",
+                      "auth_mode": "pat", "token": token, "pairing_key": key}
+            path.write_text(json.dumps(legacy), encoding="utf-8")
+            os.chmod(path, 0o600)
+            store = SecretStore(path, secret_backend=keychain)
+            self.assertEqual(store.load()["token"], token)
+            self.assertEqual(store.load()["pairing_key"], key)
+            migrated = path.read_text(encoding="utf-8")
+            self.assertNotIn(token, migrated)
+            self.assertNotIn(key, migrated)
+            self.assertEqual(set(keychain.values), set(json.loads(path.read_text(encoding="utf-8"))["secret_refs"].values()))
+
+    def test_legacy_migration_failure_preserves_plaintext_source_and_restores_keychain(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "settings.json"
+            keychain = FakeKeychain()
+            keychain.values["token"] = "preexisting-synthetic-token"
+            keychain.fail_set.add("pairing_key")
+            legacy = {"owner": "owner", "repo": "private", "channel": "blue", "recipient": "Riley",
+                      "auth_mode": "pat", "token": "synthetic-migration-token", "pairing_key": "synthetic-key"}
+            original = json.dumps(legacy)
+            path.write_text(original, encoding="utf-8")
+            os.chmod(path, 0o600)
+            store = SecretStore(path, secret_backend=keychain)
+            with self.assertRaisesRegex(RelayError, "original settings were preserved"):
+                store.load()
+            self.assertEqual(path.read_text(encoding="utf-8"), original)
+            self.assertEqual(keychain.values, {"token": "preexisting-synthetic-token"})
+
+    def test_keychain_save_failure_keeps_previous_secrets_and_file(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "settings.json"
+            keychain = FakeKeychain()
+            store = SecretStore(path, secret_backend=keychain)
+            old_key = base64.urlsafe_b64encode(KEY).decode().rstrip("=")
+            old_token = "synthetic-old-token-" + "a" * 30
+            settings = {"owner": "owner", "repo": "private", "channel": "blue", "recipient": "Riley",
+                        "auth_mode": "pat", "token": old_token, "pairing_key": old_key}
+            store.save(settings)
+            original = path.read_text()
+            keychain.fail_set.add("token")
+            new_token = "synthetic-new-token-" + "b" * 30
+            with self.assertRaises(RelayError):
+                store.save({**settings, "token": new_token})
+            self.assertEqual(path.read_text(), original)
+            self.assertEqual(store.load()["token"], old_token)
+            self.assertEqual(store.load()["pairing_key"], old_key)
+
+    def test_json_commit_failure_and_denied_new_item_cleanup_preserve_old_config(self):
+        with tempfile.TemporaryDirectory() as root:
+            keychain = FakeKeychain()
+            path = Path(root) / "settings.json"
+            store = SecretStore(path, secret_backend=keychain)
+            old_key = base64.urlsafe_b64encode(KEY).decode().rstrip("=")
+            old_token = "synthetic-old-token-" + "c" * 30
+            original_settings = {"owner": "owner", "repo": "private", "channel": "blue", "auth_mode": "pat",
+                                 "token": old_token, "pairing_key": old_key}
+            store.save(original_settings)
+            keychain.fail_delete.add("pairing_key")
+            real_write = store._write_json
+            calls = {"count": 0}
+            def fail_first_write(value):
+                calls["count"] += 1
+                if calls["count"] == 1:
+                    raise RelayError("synthetic JSON write failure")
+                return real_write(value)
+            with patch.object(store, "_write_json", side_effect=fail_first_write):
+                with self.assertRaisesRegex(RelayError, "synthetic JSON write failure"):
+                    store.save({**original_settings, "token": "synthetic-new-token-" + "d" * 30})
+            loaded = store.load()
+            self.assertEqual(loaded["token"], old_token)
+            self.assertEqual(loaded["pairing_key"], old_key)
+            self.assertTrue(store.status()["keychain_cleanup_pending"])
+
+    def test_retirement_denial_keeps_committed_config_and_tracks_pending_cleanup(self):
+        with tempfile.TemporaryDirectory() as root:
+            keychain = FakeKeychain()
+            store = SecretStore(Path(root) / "settings.json", secret_backend=keychain)
+            old_key = base64.urlsafe_b64encode(KEY).decode().rstrip("=")
+            old_token = "synthetic-old-token-" + "e" * 30
+            settings = {"owner": "owner", "repo": "private", "channel": "blue", "auth_mode": "pat",
+                        "token": old_token, "pairing_key": old_key}
+            store.save(settings)
+            keychain.fail_delete.add("token")
+            new_token = "synthetic-new-token-" + "f" * 30
+            store.save({**settings, "token": new_token})
+            self.assertEqual(store.load()["token"], new_token)
+            self.assertTrue(store.status()["keychain_cleanup_pending"])
+
+    def test_missing_keychain_secret_fails_closed_and_status_is_flags_only(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "settings.json"
+            keychain = FakeKeychain()
+            store = SecretStore(path, secret_backend=keychain)
+            key = base64.urlsafe_b64encode(KEY).decode().rstrip("=")
+            store.save({"owner": "owner", "repo": "private", "channel": "blue", "recipient": "Riley",
+                        "auth_mode": "gh", "pairing_key": key})
+            keychain.delete(json.loads(path.read_text(encoding="utf-8"))["secret_refs"]["pairing_key"])
+            with self.assertRaisesRegex(RelayError, "unavailable from macOS Keychain"):
+                store.load()
+            status = store.status()
+            self.assertFalse(status["configured"])
+            self.assertIn("error", status)
+            self.assertNotIn("pairing_key", status)
+
+    def test_removing_pairing_key_preserves_token_and_settings(self):
+        with tempfile.TemporaryDirectory() as root:
+            keychain = FakeKeychain()
+            path = Path(root) / "settings.json"
+            store = SecretStore(path, secret_backend=keychain)
+            token = "synthetic-token-" + "q" * 30
+            key = base64.urlsafe_b64encode(KEY).decode().rstrip("=")
+            settings = {"owner": "owner", "repo": "private", "channel": "blue", "recipient": "Riley",
+                        "auth_mode": "pat", "token": token, "pairing_key": key}
+            store.save(settings)
+            store.save({name: value for name, value in settings.items() if name != "pairing_key"})
+            self.assertEqual(len(keychain.values), 1)
+            self.assertTrue(next(iter(keychain.values)).startswith("token-"))
+            self.assertEqual(store.load()["token"], token)
+            metadata = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(set(metadata["secret_refs"]), {"token"})
+            self.assertTrue(metadata["secret_refs"]["token"].startswith("token-"))
+            self.assertNotIn(key, path.read_text(encoding="utf-8"))
+
+    def test_macos_keychain_unavailable_fails_closed_without_file_fallback(self):
+        from keychain_store import KeychainError
+        with patch("relay_core.sys.platform", "darwin"), patch("relay_core.MacKeychain", side_effect=KeychainError("synthetic")):
+            with self.assertRaisesRegex(RelayError, "Keychain is unavailable"):
+                make_secret_backend()
+
+    def test_failed_keychain_remove_tracks_only_owned_pending_items(self):
+        with tempfile.TemporaryDirectory() as root:
+            keychain = FakeKeychain()
+            path = Path(root) / "settings.json"
+            store = SecretStore(path, secret_backend=keychain)
+            token = "synthetic-token-" + "r" * 30
+            key = base64.urlsafe_b64encode(KEY).decode().rstrip("=")
+            store.save({"owner": "owner", "repo": "private", "channel": "blue", "auth_mode": "pat",
+                        "token": token, "pairing_key": key})
+            keychain.fail_delete.add("token")
+            with self.assertRaisesRegex(RelayError, "could not be removed"):
+                store.remove()
+            self.assertTrue(path.exists())
+            self.assertFalse(store.status()["configured"])
+            self.assertTrue(store.status()["keychain_cleanup_pending"])
+
+    def test_keychain_items_are_isolated_between_settings_paths(self):
+        with tempfile.TemporaryDirectory() as root:
+            keychain = FakeKeychain()
+            left = SecretStore(Path(root) / "left" / "settings.json", secret_backend=keychain)
+            right = SecretStore(Path(root) / "right" / "settings.json", secret_backend=keychain)
+            left_key = base64.urlsafe_b64encode(KEY).decode().rstrip("=")
+            right_key = base64.urlsafe_b64encode(bytes(reversed(KEY))).decode().rstrip("=")
+            left.save({"owner": "owner", "repo": "private", "channel": "blue", "auth_mode": "gh",
+                       "pairing_key": left_key})
+            right.save({"owner": "owner", "repo": "private", "channel": "blue", "auth_mode": "gh",
+                        "pairing_key": right_key})
+            self.assertNotEqual(left.load()["pairing_key"], right.load()["pairing_key"])
+            self.assertEqual(len(keychain.values), 2)
+            left_metadata = left.path.read_text(encoding="utf-8")
+            right_metadata = right.path.read_text(encoding="utf-8")
+            right.path.write_text(left_metadata, encoding="utf-8")
+            os.chmod(right.path, 0o600)
+            with self.assertRaisesRegex(RelayError, "references are invalid"):
+                right.load()
+            right.path.write_text(right_metadata, encoding="utf-8")
+            left.remove()
+            self.assertEqual(right.load()["pairing_key"], right_key)
+            self.assertEqual(len(keychain.values), 1)
 
     def test_no_clobber_and_symlink_rejection(self):
         with tempfile.TemporaryDirectory() as root:
@@ -413,6 +633,20 @@ class RelayProtocolTests(unittest.TestCase):
                 return FakeResponse(302, {"Location": f"https://{CDN_HOST}/second"})
         with self.assertRaises(RelayError):
             SafeHTTP(opener=TwoHops()).request("GET", API + "/asset", {}, allow_asset_redirect=True)
+
+    def test_safe_http_uses_no_ambient_proxy_configuration(self):
+        import urllib.request
+        class StubResponse:
+            status = 200
+            headers = {}
+            def read(self, _): return b"ok"
+        class StubOpener:
+            def open(self, request, timeout): return StubResponse()
+        with patch("urllib.request.build_opener", return_value=StubOpener()) as build:
+            response = SafeHTTP._open(urllib.request.Request("https://api.github.com/test"))
+        self.assertEqual(response.read(2), b"ok")
+        proxy = next(handler for handler in build.call_args.args if isinstance(handler, urllib.request.ProxyHandler))
+        self.assertEqual(proxy.proxies, {})
 
 
 if __name__ == "__main__":
